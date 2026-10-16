@@ -10,6 +10,9 @@ const runId = Date.now();
 let sequence = 0;
 let passed = 0;
 let failed = 0;
+// Discord drops replies after 3 s; leave margin for the network between Discord and n8n.
+const MAX_REPLY_MS = 2500;
+const replyTimes = [];
 
 function interaction(name, options = []) {
   sequence += 1;
@@ -25,6 +28,7 @@ async function send(body, { key = privateKey, timestamp, tamper, headers } = {})
   const raw = typeof body === 'string' ? body : JSON.stringify(body);
   const ts = String(timestamp ?? Math.floor(Date.now() / 1000));
   const signature = crypto.sign(null, Buffer.from(ts + raw), key).toString('hex');
+  const started = performance.now();
   const response = await fetch(BASE_URL, {
     method: 'POST',
     headers: headers ?? {
@@ -35,6 +39,7 @@ async function send(body, { key = privateKey, timestamp, tamper, headers } = {})
     body: tamper ? raw.replace(tamper[0], tamper[1]) : raw,
   });
   const text = await response.text();
+  replyTimes.push(Math.round(performance.now() - started));
   let json = null;
   try { json = JSON.parse(text); } catch { /* not JSON */ }
   return { status: response.status, json, text };
@@ -111,6 +116,9 @@ check('invalid amount is never confirmed',
 r = await send(interaction('prestamo'));
 check('unknown command gets a clear answer',
   isPrivateReply(r) && reply(r) === 'No conozco ese comando.', r);
+
+const slowest = Math.max(...replyTimes);
+check(`every reply within ${MAX_REPLY_MS} ms (slowest: ${slowest} ms)`, slowest <= MAX_REPLY_MS, replyTimes);
 
 console.log('---');
 console.log(`${passed} passed, ${failed} failed`);

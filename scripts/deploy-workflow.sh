@@ -20,7 +20,7 @@ cli import:workflow --input=/tmp/import.json
 cli publish:workflow --id="$workflow_id"
 docker compose up -d n8n >/dev/null 2>&1
 
-for _ in $(seq 1 90); do
+for _ in $(seq 1 300); do
   [[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5678/healthz) == 200 ]] && break
   sleep 1
 done
@@ -30,7 +30,7 @@ done
 synced_sql="SELECT count(*) FROM workflow_entity w JOIN workflow_published_version p ON p.\"workflowId\" = w.id
             WHERE w.id = '$workflow_id' AND p.\"publishedVersionId\" = w.\"activeVersionId\" AND w.\"activeVersionId\" = w.\"versionId\";"
 synced=0
-for _ in $(seq 1 90); do
+for _ in $(seq 1 300); do
   synced=$(docker compose exec -T postgres sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<<"$synced_sql")
   [[ $synced == 1 ]] && break
   sleep 1
@@ -43,7 +43,7 @@ fi
 # /healthz answers before workflows are activated; when a path is given, wait for the
 # webhook itself (an unsigned request must get 401, not 404).
 if [[ -n $wait_path ]]; then
-  for _ in $(seq 1 90); do
+  for _ in $(seq 1 300); do
     [[ $(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:5678/webhook/$wait_path" -d '{}') == 401 ]] && exit 0
     sleep 1
   done
