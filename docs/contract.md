@@ -7,8 +7,10 @@ What the bot accepts and returns. Code must follow this file; change this file f
 - Discord sends each slash command as an HTTPS `POST` to
   `{WEBHOOK_URL}webhook/discord-interactions` (Discord "Interactions Endpoint URL").
 - Every request carries `X-Signature-Ed25519` and `X-Signature-Timestamp`.
-  The bot verifies the signature over `timestamp + raw body` with `DISCORD_PUBLIC_KEY`.
+  The bot verifies the signature over `timestamp + raw body` (the exact bytes received,
+  never re-serialized JSON) with the Discord public key.
   - Invalid or missing signature → `401`, nothing is processed.
+  - Timestamp more than 300 seconds away from the server clock → `401` (replay protection).
 - `type: 1` (PING) → `{"type": 1}`.
 - `type: 2` (APPLICATION_COMMAND) → `{"type": 4, "data": {"content": "...", "flags": 64}}`.
   - `flags: 64` makes the reply visible only to the sender (financial data is private).
@@ -28,6 +30,9 @@ What the bot accepts and returns. Code must follow this file; change this file f
 
 ## Commands
 
+Slash command definitions live in `discord/commands.json`; their choices must match the
+database constraints in `sql/001_transactions.up.sql`.
+
 ### `/gasto`
 
 | Option | Type | Required | Rules |
@@ -37,6 +42,9 @@ What the bot accepts and returns. Code must follow this file; change this file f
 | `nota` | STRING | no | max 200 characters |
 
 Reply: `✅ Gasto registrado: $20.000 en mercado.\nGastado este mes: $350.000`
+
+The same interaction delivered twice is stored once; the repeat gets
+`Ese movimiento ya estaba registrado.` (applies to `/ingreso` too).
 
 ### `/ingreso`
 
@@ -68,8 +76,10 @@ largest first. Periods use the `America/Bogota` calendar; `semana` starts on Mon
 
 ### `/deshacer`
 
-No options. Deletes the sender's most recent transaction and shows what was deleted.
+No options. Deletes the sender's most recent transaction and shows what was deleted:
+`↩️ Eliminado: gasto de $20.000 (mercado).\nSaldo total: $1.130.000`
 If there is nothing to delete: `No hay movimientos para deshacer.`
+Negative balances display as `-$20.000`.
 
 ## Errors
 
