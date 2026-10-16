@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Regenerates docs/images/ from workflows/discord-interactions.json.
-# Starts a THROWAWAY n8n (no real data or secrets): creates a random owner, a placeholder
-# Postgres credential and imports the workflow, takes the screenshots, then removes it all.
+# Starts a THROWAWAY n8n (no real data or secrets): creates a random owner, placeholder
+# Postgres and OpenRouter credentials and imports the workflow, takes the screenshots, then removes it all.
 # Usage: scripts/docs-screenshots.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -33,7 +33,12 @@ api -o /dev/null -X POST "http://$n8n:5678/rest/owner/setup" -H 'Content-Type: a
 credential_id=$(api -X POST "http://$n8n:5678/rest/credentials" -H 'Content-Type: application/json' \
   -d '{"name":"Postgres local","type":"postgres","data":{"host":"postgres","database":"finanzas","user":"bot_app","password":"documentation-only","port":5432,"ssl":"disable"}}' \
   | jq -r '.data.id')
-jq --arg id "$credential_id" '(.nodes[] | select(.credentials.postgres)) .credentials.postgres.id = $id
+ai_credential_id=$(api -X POST "http://$n8n:5678/rest/credentials" -H 'Content-Type: application/json' \
+  -d '{"name":"OpenRouter","type":"httpHeaderAuth","data":{"name":"Authorization","value":"Bearer documentation-only"}}' \
+  | jq -r '.data.id')
+jq --arg id "$credential_id" --arg ai "$ai_credential_id" '
+  (.nodes[] | select(.credentials.postgres)) .credentials.postgres.id = $id
+  | (.nodes[] | select(.credentials.httpHeaderAuth)) .credentials.httpHeaderAuth.id = $ai
   | {name, nodes, connections, settings}' workflows/discord-interactions.json > "$work/workflow.json"
 workflow_id=$(api -X POST "http://$n8n:5678/rest/workflows" -H 'Content-Type: application/json' \
   --data-binary @/work/workflow.json | jq -r '.data.id')

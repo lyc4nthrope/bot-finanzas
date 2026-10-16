@@ -9,7 +9,10 @@ from playwright.sync_api import sync_playwright
 B = os.environ["N8N_URL"]
 NODES = ["Discord webhook", "Verify signature", "Is authentic?", "Reject 401", "Route",
          "Build PONG", "Record transaction", "Get summary", "Undo last",
-         "Build unknown command", "Format reply", "Build database error", "Reply"]
+         "Build unknown command", "Format reply", "Build database error", "Reply",
+         "Acknowledge", "Build AI request", "Ask AI", "Validate AI output", "Is valid?",
+         "Record AI transaction", "Format AI reply", "Build AI database error",
+         "Build AI not understood", "Build AI unavailable", "Edit Discord message", "Build help"]
 
 def slug(name):
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")

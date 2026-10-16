@@ -2,6 +2,26 @@
 
 Bot de finanzas personales: registra ingresos y gastos, y consulta saldos desde Discord.
 
+## El bot en acción
+
+Comandos: `/gasto`, `/ingreso`, `/saldo`, `/resumen`, `/deshacer`, `/registrar` (con IA) y `/ayuda`
+(explica cómo usar el bot en palabras sencillas).
+Cada respuesta es privada: solo la ve quien escribió el comando.
+
+Comandos básicos (`/ingreso`, `/gasto`, `/resumen`):
+
+![Comandos básicos en Discord](docs/images/discord-demo-commands.png)
+
+`/registrar` responde de inmediato que está pensando, porque la IA tarda más que el límite de
+3 segundos de Discord…
+
+![Respuesta diferida de /registrar](docs/images/discord-demo-thinking.png)
+
+…y luego edita ese mensaje. Registra solo lo que pasa la validación; si no entiende, no guarda
+nada. `/resumen` muestra cuánto queda en el periodo y el saldo total acumulado:
+
+![/registrar y /resumen en Discord](docs/images/discord-demo-ai-and-summary.png)
+
 ## Stack
 
 | Componente | Herramienta |
@@ -9,7 +29,7 @@ Bot de finanzas personales: registra ingresos y gastos, y consulta saldos desde 
 | Canal de chat | Slash commands de Discord |
 | Automatización | n8n (Docker; primero local, luego Render) |
 | Base de datos | PostgreSQL (contenedor local, luego Supabase) |
-| IA opcional | Modelos gratuitos de OpenRouter |
+| IA (`/registrar`) | Modelos gratuitos de OpenRouter, con respuesta diferida y validación por lista blanca |
 
 ## Configuración
 
@@ -33,7 +53,9 @@ Bot de finanzas personales: registra ingresos y gastos, y consulta saldos desde 
 
 4. Activa los usuarios de mínimo privilegio y, en n8n (http://localhost:5678), crea la cuenta de
    propietario y una credencial de Postgres llamada `Postgres local` (host `postgres`, base de datos
-   `finanzas`, usuario `bot_app`, contraseña `DB_BOT_PASSWORD` de `.env`):
+   `finanzas`, usuario `bot_app`, contraseña `DB_BOT_PASSWORD` de `.env`). Para `/registrar`, crea
+   también una credencial *Header Auth* llamada `OpenRouter` (header `Authorization`, valor
+   `Bearer <OPENROUTER_API_KEY>`):
 
    ```bash
    scripts/setup-database.sh local
@@ -68,9 +90,10 @@ Configuración desde cero:
 
 1. `scripts/setup-database.sh supabase --migrate` aplica las migraciones y habilita los roles.
 2. `scripts/cloud-n8n.sh up`; luego abre http://localhost:5679 para crear la cuenta de propietario
-   y una credencial de Postgres (`bot_app.<project-ref>`, SSL require) **antes** de que exista la
+   una credencial de Postgres (`bot_app.<project-ref>`, SSL require) y la credencial *Header Auth*
+   `OpenRouter` **antes** de que exista la
    instancia en la nube, para que su página de configuración nunca pueda ser reclamada públicamente.
-3. `scripts/cloud-n8n.sh deploy workflows/discord-interactions.json <credential id> "<credential name>"`;
+3. `scripts/cloud-n8n.sh deploy workflows/discord-interactions.json <id postgres> "<nombre postgres>" <id openrouter> "<nombre openrouter>"`;
    luego `scripts/cloud-n8n.sh down`.
 4. Crea el servicio en Render (Docker, `deploy/Dockerfile`, health check `/healthz`) con las
    variables indicadas en el ADR 0002, y apunta la Interactions Endpoint URL de Discord a
@@ -87,7 +110,7 @@ Todas las pruebas se ejecutan contra el Postgres y el n8n locales reales; no se 
 | `scripts/test-schema.sh` | Las restricciones de las tablas rechazan datos de dinero inválidos |
 | `scripts/test-functions.sh` | Saldos, periodos (calendario de Bogotá), idempotencia, deshacer |
 | `scripts/test-roles.sh` | Mínimo privilegio: qué pueden y qué no pueden hacer `bot_app` y `n8n_app` |
-| `scripts/test-bot.sh` | El workflow de extremo a extremo: firmas, respuestas, escrituras en la base de datos |
+| `scripts/test-bot.sh` | El workflow de extremo a extremo: firmas, respuestas, escrituras en la base de datos y `/registrar` frente a respuestas válidas, maliciosas y fallidas de la IA (`scripts/stub-server.mjs` imita a OpenRouter y a Discord) |
 
 ## Documentación
 

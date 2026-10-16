@@ -17,6 +17,7 @@ SECTIONS = [
     "docs/workflow.md",
     "docs/adr/0001-stack.md",
     "docs/adr/0002-render-instead-of-hugging-face.md",
+    "docs/adr/0003-ia-con-respuesta-diferida.md",
 ]
 OUTPUT = REPO / "docs" / "bot-finanzas.pdf"
 
