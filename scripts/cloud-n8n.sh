@@ -2,7 +2,8 @@
 # Runs the "n8n-cloud" compose service: a local n8n that reads and writes the
 # production n8n state in Supabase. Derives the pooler user for n8n_app from .env.
 # Usage: scripts/cloud-n8n.sh <up|down|logs|cli ARGS...>
-#        scripts/cloud-n8n.sh deploy <workflow.json> <credential id> <credential name>
+#        scripts/cloud-n8n.sh deploy <workflow.json> <postgres credential id> <postgres credential name> \
+#                                    <OpenRouter credential id> <OpenRouter credential name>
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,15 +25,16 @@ admin_psql() {
   return 1
 }
 
-# deploy <workflow.json> <credential id> <credential name>
-# Imports a workflow bound to the production Postgres credential and publishes it.
+# deploy <workflow.json> <postgres id> <postgres name> <openrouter id> <openrouter name>
+# Imports a workflow bound to the production credentials and publishes it.
 # n8n must be stopped while the CLI changes workflows (see scripts/deploy-workflow.sh).
 deploy() {
-  local source=$1 credential_id=$2 credential_name=$3 bound workflow_id synced=0
+  local source=$1 bound workflow_id synced=0
   bound=$(mktemp --suffix=.json)
   trap 'rm -f "$bound"' RETURN
-  jq --arg id "$credential_id" --arg name "$credential_name" \
-    '(.nodes[] | select(.credentials.postgres)) .credentials.postgres = {id: $id, name: $name}' \
+  jq --arg pg_id "$2" --arg pg_name "$3" --arg ai_id "$4" --arg ai_name "$5" '
+    (.nodes[] | select(.credentials.postgres)) .credentials.postgres = {id: $pg_id, name: $pg_name}
+    | (.nodes[] | select(.credentials.httpHeaderAuth)) .credentials.httpHeaderAuth = {id: $ai_id, name: $ai_name}' \
     "$source" > "$bound"
   workflow_id=$(jq -r .id "$bound")
 

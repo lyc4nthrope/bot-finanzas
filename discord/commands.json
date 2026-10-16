@@ -55,5 +55,18 @@
     "name": "deshacer",
     "type": 1,
     "description": "Borrar el último movimiento registrado"
+  },
+  {
+    "name": "ayuda",
+    "type": 1,
+    "description": "Ver cómo usar el bot"
+  },
+  {
+    "name": "registrar",
+    "type": 1,
+    "description": "Registrar un movimiento escribiéndolo normal (con IA)",
+    "options": [
+      { "name": "texto", "description": "Por ejemplo: gasté 20 mil en el mercado", "type": 3, "required": true, "max_length": 200 }
+    ]
   }
 ]
