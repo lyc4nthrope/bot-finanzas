@@ -17,6 +17,7 @@ responder consultas de saldo. Restricción estricta: costo cero.
 - **Keep-alive:** un programador externo (cron-job.org) hace ping al Space; los Spaces gratuitos se suspenden
   tras 48 horas sin tráfico.
 - **IA (opcional, más adelante):** modelos gratuitos de OpenRouter, solo para entradas en texto libre.
+  *Actualización: implementada como `/registrar`; ver ADR 0003.*
 
 ## Alternativas consideradas
 

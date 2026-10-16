@@ -71,8 +71,28 @@ Este mes: ingresos $1.500.000 · gastos $350.000
 |---|---|---|---|
 | `periodo` | STRING (choices) | no | `hoy`, `semana`, `mes` (predeterminado), `año` |
 
-Respuesta: totales de ingresos y gastos del periodo, más los gastos agrupados por categoría,
-de mayor a menor. Los periodos usan el calendario de `America/Bogota`; `semana` comienza el lunes.
+Respuesta: totales de ingresos y gastos del periodo, lo que queda en el periodo, el saldo total
+acumulado y los gastos agrupados por categoría, de mayor a menor. Los periodos usan el calendario
+de `America/Bogota`; `semana` comienza el lunes.
+
+```
+📊 Resumen de este mes
+Ingresos: $20.000
+Gastos: $10.000
+
+💵 Te queda este mes: $10.000
+   ↳ lo que entró este mes menos lo que gastaste este mes
+💰 Saldo total acumulado: $110.000
+   ↳ todo lo que has registrado desde el inicio: ingresos menos gastos
+
+Gastos por categoría:
+• comida: $10.000
+```
+
+- "Te queda" = ingresos del periodo − gastos del periodo; puede ser negativo (`-$5.000`).
+  Su etiqueta y su explicación siguen el periodo: `hoy`, `esta semana`, `este mes`, `este año`.
+- "Saldo total acumulado" = todos los ingresos − todos los gastos, sin importar el periodo.
+- Sin gastos en el periodo, la última sección dice `Sin gastos en este periodo.`
 
 ### `/deshacer`
 
@@ -80,6 +100,69 @@ Sin opciones. Elimina el movimiento más reciente de quien envía el comando y m
 `↩️ Eliminado: gasto de $20.000 (mercado).\nSaldo total: $1.130.000`
 Si no hay nada que eliminar: `No hay movimientos para deshacer.`
 Los saldos negativos se muestran como `-$20.000`.
+
+### `/ayuda`
+
+Sin opciones. Responde (privado, `flags: 64`) este texto, en Markdown de Discord:
+
+```
+📒 **Cómo usar el bot de finanzas**
+
+Escribe **/** en el chat y elige el comando. Lo que respondo **solo lo ves tú**.
+
+💬 **La forma fácil: escríbelo normal**
+**/registrar** → "gasté 20 mil en el mercado" o "me pagaron el sueldo, 1 millón y medio"
+Te digo lo que entendí. Si me equivoqué, usa **/deshacer**.
+
+✍️ **Si prefieres hacerlo paso a paso**
+**/gasto** → pones el valor y eliges en qué se fue (mercado, comida, transporte…)
+**/ingreso** → pones el valor y de dónde vino (sueldo, ventas, regalo…)
+⚠️ El valor va sin puntos: escribe 20000, no 20.000
+
+📊 **Para saber cómo vas**
+**/saldo** → cuánta plata tienes y cuánto llevas gastado este mes
+**/resumen** → cuánto te queda y en qué se te fue la plata (hoy, semana, mes o año)
+
+↩️ **¿Te equivocaste?**
+**/deshacer** → borra lo último que registraste
+```
+
+### `/registrar` (con IA)
+
+| Opción | Tipo | Obligatoria | Reglas |
+|---|---|---|---|
+| `texto` | STRING | sí | máx. 200 caracteres, por ejemplo `gasté 20 mil en el mercado` |
+
+La IA (modelos gratuitos de OpenRouter) tarda varios segundos, más que el límite de 3 s de
+Discord, por eso la respuesta es **diferida**:
+
+1. Tras verificar la firma, el bot responde de inmediato `{"type": 5, "data": {"flags": 64}}`
+   y Discord muestra que el bot está pensando (solo a quien envió el comando).
+2. El bot pide a la IA un JSON con el esquema `understood`, `type`, `amount`, `category`, `note`.
+3. Valida ese JSON (ver abajo) y, solo si es válido, lo registra con la misma función que `/gasto`.
+4. Edita el mensaje original con `PATCH /webhooks/{application_id}/{interaction_token}/messages/@original`.
+
+La salida de la IA **no es confiable** y se valida con una lista blanca. Se rechaza, sin registrar
+nada, si ocurre cualquiera de estos casos:
+
+- `understood` no es `true`.
+- `type` no es `expense` ni `income`.
+- `amount` no es un entero entre 1 y 1.000.000.000.
+- `category` no pertenece a la lista del tipo (gastos: `mercado`, `comida`, `transporte`,
+  `servicios`, `hogar`, `salud`, `deudas`, `otro`; ingresos: `sueldo`, `ventas`, `regalo`, `otro`).
+- La respuesta no es JSON o le faltan campos.
+
+La nota se recorta a 200 caracteres. El usuario siempre sale de la interacción firmada, nunca del
+texto. El movimiento queda con la fecha del mensaje: palabras como "ayer" no cambian la fecha.
+
+| Caso | Mensaje final |
+|---|---|
+| Registrado | `🤖 Entendí: gasto de $35.000 en transporte (bus y taxi).\n✅ Registrado. Gastado este mes: $350.000\nSi no es correcto, usa /deshacer.` |
+| Ingreso registrado | igual, con `ingreso de` y `Saldo total:` en lugar de `Gastado este mes:` |
+| La IA no entendió o su respuesta no pasó la validación | `🤔 No entendí ese movimiento. Intenta con /gasto o /ingreso.` |
+| La IA no respondió (error, límite diario o demora) | `⚠️ La IA no está disponible ahora. Usa /gasto o /ingreso.` |
+| Base de datos no disponible | `⚠️ No pude guardar el movimiento. Intenta de nuevo en un momento.` |
+| Interacción repetida | `Ese movimiento ya estaba registrado.` |
 
 ## Errores
 
@@ -93,6 +176,6 @@ El bot nunca confirma un movimiento que no se haya almacenado.
 
 ## Fuera del alcance de v1
 
-- Registro en texto libre con IA (`/registrar`, fase 6).
+- Fechas relativas en `/registrar` ("ayer", "el lunes").
 - Edición de movimientos pasados (usa `/deshacer` y registra de nuevo).
 - Presupuestos, alertas, notas de voz.
