@@ -75,12 +75,12 @@ def build_html():
     cover = f"""
     <div class="cover">
       <h1>bot-finanzas</h1>
-      <p>Personal finance bot: Discord slash commands, n8n and PostgreSQL</p>
-      <p>Repository: https://github.com/lyc4nthrope/bot-finanzas</p>
-      <p>Generated {today}</p>
+      <p>Bot de finanzas personales: slash commands de Discord, n8n y PostgreSQL</p>
+      <p>Repositorio: https://github.com/lyc4nthrope/bot-finanzas</p>
+      <p>Generado el {today}</p>
     </div>"""
     body = "".join(f'<div class="section">{render_section(s)}</div>' for s in SECTIONS)
-    return f"<!doctype html><html><head><meta charset='utf-8'><style>{CSS}</style></head><body>{cover}{body}</body></html>"
+    return f"<!doctype html><html lang='es'><head><meta charset='utf-8'><style>{CSS}</style></head><body>{cover}{body}</body></html>"
 
 
 def main():

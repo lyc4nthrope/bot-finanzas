@@ -1,64 +1,64 @@
-# Bot contract (v1)
+# Contrato del bot (v1)
 
-What the bot accepts and returns. Code must follow this file; change this file first.
+Qué acepta y qué devuelve el bot. El código debe seguir este archivo; primero se modifica este archivo.
 
-## Transport
+## Transporte
 
-- Discord sends each slash command as an HTTPS `POST` to
-  `{WEBHOOK_URL}webhook/discord-interactions` (Discord "Interactions Endpoint URL").
-- Every request carries `X-Signature-Ed25519` and `X-Signature-Timestamp`.
-  The bot verifies the signature over `timestamp + raw body` (the exact bytes received,
-  never re-serialized JSON) with the Discord public key.
-  - Invalid or missing signature → `401`, nothing is processed.
-  - Timestamp more than 300 seconds away from the server clock → `401` (replay protection).
+- Discord envía cada slash command como un `POST` HTTPS a
+  `{WEBHOOK_URL}webhook/discord-interactions` ("Interactions Endpoint URL" de Discord).
+- Toda solicitud incluye `X-Signature-Ed25519` y `X-Signature-Timestamp`.
+  El bot verifica la firma sobre `timestamp + raw body` (los bytes exactos recibidos,
+  nunca JSON re-serializado) con la clave pública de Discord.
+  - Firma inválida o ausente → `401`, no se procesa nada.
+  - Timestamp con más de 300 segundos de diferencia respecto del reloj del servidor → `401` (protección contra replay).
 - `type: 1` (PING) → `{"type": 1}`.
 - `type: 2` (APPLICATION_COMMAND) → `{"type": 4, "data": {"content": "...", "flags": 64}}`.
-  - `flags: 64` makes the reply visible only to the sender (financial data is private).
-- Basic commands must reply in under 3 seconds (Discord limit).
+  - `flags: 64` hace que la respuesta solo sea visible para quien la envía (los datos financieros son privados).
+- Los comandos básicos deben responder en menos de 3 segundos (límite de Discord).
 
-## Identity
+## Identidad
 
-- Each transaction belongs to the Discord user id that sent the command (`member.user.id` or `user.id`).
-- A user only ever reads and changes their own transactions.
+- Cada movimiento pertenece al id de usuario de Discord que envió el comando (`member.user.id` o `user.id`).
+- Un usuario solo puede leer y modificar sus propios movimientos.
 
-## Amounts
+## Montos
 
-- Option type `INTEGER`, whole Colombian pesos, `min_value: 1`, `max_value: 1000000000`.
-- Why INTEGER and not NUMBER: in Colombia `20.000` means twenty thousand. A NUMBER option
-  would silently read it as `20`; an INTEGER option makes Discord reject it before sending.
-- Displayed as `$20.000` (es-CO format).
+- Tipo de opción `INTEGER`, pesos colombianos enteros, `min_value: 1`, `max_value: 1000000000`.
+- Por qué INTEGER y no NUMBER: en Colombia `20.000` significa veinte mil. Una opción NUMBER
+  lo leería silenciosamente como `20`; una opción INTEGER hace que Discord lo rechace antes de enviarlo.
+- Se muestra como `$20.000` (formato es-CO).
 
-## Commands
+## Comandos
 
-Slash command definitions live in `discord/commands.json`; their choices must match the
-database constraints in `sql/001_transactions.up.sql`.
+Las definiciones de los slash commands están en `discord/commands.json`; sus opciones deben coincidir con las
+restricciones de la base de datos en `sql/001_transactions.up.sql`.
 
 ### `/gasto`
 
-| Option | Type | Required | Rules |
+| Opción | Tipo | Obligatoria | Reglas |
 |---|---|---|---|
-| `monto` | INTEGER | yes | 1 to 1,000,000,000 |
-| `categoria` | STRING (choices) | yes | `mercado`, `comida`, `transporte`, `servicios`, `hogar`, `salud`, `deudas`, `otro` |
-| `nota` | STRING | no | max 200 characters |
+| `monto` | INTEGER | sí | 1 a 1,000,000,000 |
+| `categoria` | STRING (choices) | sí | `mercado`, `comida`, `transporte`, `servicios`, `hogar`, `salud`, `deudas`, `otro` |
+| `nota` | STRING | no | máximo 200 caracteres |
 
-Reply: `✅ Gasto registrado: $20.000 en mercado.\nGastado este mes: $350.000`
+Respuesta: `✅ Gasto registrado: $20.000 en mercado.\nGastado este mes: $350.000`
 
-The same interaction delivered twice is stored once; the repeat gets
-`Ese movimiento ya estaba registrado.` (applies to `/ingreso` too).
+La misma interacción entregada dos veces se almacena una sola vez; la repetición recibe
+`Ese movimiento ya estaba registrado.` (también aplica a `/ingreso`).
 
 ### `/ingreso`
 
-| Option | Type | Required | Rules |
+| Opción | Tipo | Obligatoria | Reglas |
 |---|---|---|---|
-| `monto` | INTEGER | yes | 1 to 1,000,000,000 |
-| `categoria` | STRING (choices) | yes | `sueldo`, `ventas`, `regalo`, `otro` |
-| `nota` | STRING | no | max 200 characters |
+| `monto` | INTEGER | sí | 1 a 1,000,000,000 |
+| `categoria` | STRING (choices) | sí | `sueldo`, `ventas`, `regalo`, `otro` |
+| `nota` | STRING | no | máximo 200 caracteres |
 
-Reply: `✅ Ingreso registrado: $1.500.000 (sueldo).\nSaldo total: $1.150.000`
+Respuesta: `✅ Ingreso registrado: $1.500.000 (sueldo).\nSaldo total: $1.150.000`
 
 ### `/saldo`
 
-No options. Reply:
+Sin opciones. Respuesta:
 
 ```
 💰 Saldo total: $1.150.000
@@ -67,32 +67,32 @@ Este mes: ingresos $1.500.000 · gastos $350.000
 
 ### `/resumen`
 
-| Option | Type | Required | Rules |
+| Opción | Tipo | Obligatoria | Reglas |
 |---|---|---|---|
-| `periodo` | STRING (choices) | no | `hoy`, `semana`, `mes` (default), `año` |
+| `periodo` | STRING (choices) | no | `hoy`, `semana`, `mes` (predeterminado), `año` |
 
-Reply: totals of income and expenses for the period, plus expenses grouped by category,
-largest first. Periods use the `America/Bogota` calendar; `semana` starts on Monday.
+Respuesta: totales de ingresos y gastos del periodo, más los gastos agrupados por categoría,
+de mayor a menor. Los periodos usan el calendario de `America/Bogota`; `semana` comienza el lunes.
 
 ### `/deshacer`
 
-No options. Deletes the sender's most recent transaction and shows what was deleted:
+Sin opciones. Elimina el movimiento más reciente de quien envía el comando y muestra lo que se eliminó:
 `↩️ Eliminado: gasto de $20.000 (mercado).\nSaldo total: $1.130.000`
-If there is nothing to delete: `No hay movimientos para deshacer.`
-Negative balances display as `-$20.000`.
+Si no hay nada que eliminar: `No hay movimientos para deshacer.`
+Los saldos negativos se muestran como `-$20.000`.
 
-## Errors
+## Errores
 
-| Case | Reply |
+| Caso | Respuesta |
 |---|---|
-| Unknown command | `No conozco ese comando.` |
-| Database unavailable | `⚠️ No pude guardar el movimiento. Intenta de nuevo en un momento.` |
-| Any other failure | `⚠️ Algo salió mal. Intenta de nuevo.` |
+| Comando desconocido | `No conozco ese comando.` |
+| Base de datos no disponible | `⚠️ No pude guardar el movimiento. Intenta de nuevo en un momento.` |
+| Cualquier otra falla | `⚠️ Algo salió mal. Intenta de nuevo.` |
 
-The bot never confirms a transaction that was not stored.
+El bot nunca confirma un movimiento que no se haya almacenado.
 
-## Out of scope for v1
+## Fuera del alcance de v1
 
-- Free-text registration with AI (`/registrar`, phase 6).
-- Editing past transactions (use `/deshacer` and register again).
-- Budgets, alerts, voice notes.
+- Registro en texto libre con IA (`/registrar`, fase 6).
+- Edición de movimientos pasados (usa `/deshacer` y registra de nuevo).
+- Presupuestos, alertas, notas de voz.

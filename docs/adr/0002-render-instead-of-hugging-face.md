@@ -1,52 +1,52 @@
-# ADR 0002: Host n8n on Render instead of Hugging Face
+# ADR 0002: Alojar n8n en Render en lugar de Hugging Face
 
-- Status: accepted (supersedes the hosting part of ADR 0001)
-- Date: 2026-10-16
+- Estado: aceptado (reemplaza la parte de alojamiento del ADR 0001)
+- Fecha: 2026-10-16
 
-## Context
+## Contexto
 
-ADR 0001 planned to run n8n in a free Hugging Face Docker Space. When creating the Space,
-Hugging Face answered: "hosting Gradio and Docker Spaces on free cpu-basic requires a PRO
-subscription". Since July 2026 only Spaces created earlier keep the free tier.
+El ADR 0001 planeaba ejecutar n8n en un Docker Space gratuito de Hugging Face. Al crear el Space,
+Hugging Face respondió: "hosting Gradio and Docker Spaces on free cpu-basic requires a PRO
+subscription". Desde julio de 2026, solo los Spaces creados antes conservan el plan gratuito.
 
-## Decision
+## Decisión
 
-Run n8n as a free Render web service built from `deploy/Dockerfile`, in the Virginia
-region (same AWS region as the Supabase project). An external scheduler pings it so the
-free instance does not sleep.
+Ejecutar n8n como un servicio web gratuito de Render construido desde `deploy/Dockerfile`, en la
+región de Virginia (la misma región de AWS que el proyecto de Supabase). Un programador externo le hace ping para que la
+instancia gratuita no se suspenda.
 
-## Alternatives considered
+## Alternativas consideradas
 
-| Option | Why not chosen |
+| Opción | Por qué no se eligió |
 |---|---|
-| Hugging Face PRO (~9 USD/month) | The project must cost nothing |
-| Oracle Cloud Always Free | Requires a card; ARM capacity is often unavailable; more operations work |
-| Koyeb | Free tier closed to new users after its acquisition (Feb 2026) |
-| Developer PC with a tunnel | The bot would stop whenever the PC is off |
+| Hugging Face PRO (~9 USD/mes) | El proyecto no debe tener ningún costo |
+| Oracle Cloud Always Free | Requiere tarjeta; la capacidad ARM a menudo no está disponible; más trabajo de operación |
+| Koyeb | Plan gratuito cerrado a nuevos usuarios tras su adquisición (feb. 2026) |
+| PC del desarrollador con un túnel | El bot se detendría cada vez que el PC estuviera apagado |
 
-## Measurements (Render free limits emulated locally: 512 MB, 0.1 CPU)
+## Mediciones (límites gratuitos de Render emulados localmente: 512 MB, 0.1 CPU)
 
-- Memory: 347 MB idle, no out-of-memory kills.
-- Startup: about 110 s until `/healthz` answers.
-- Reply time: 2.0 to 4.9 s, half above Discord's 3 s limit.
+- Memoria: 347 MB en reposo, sin terminaciones por falta de memoria.
+- Arranque: unos 110 s hasta que `/healthz` responde.
+- Tiempo de respuesta: de 2.0 a 4.9 s, la mitad por encima del límite de 3 s de Discord.
 
-## Measurements on the real Render service (2026-10-16)
+## Mediciones en el servicio real de Render (2026-10-16)
 
-- Webhook path with signature check, warm, 20 requests from Colombia: median 0.70 s,
-  p90 0.98 s, max 1.28 s (about 0.3 s of that is network from Colombia).
-- First request after a restart: about 22 s (the code-node runner loads on first use).
-- `docker --cpus 0.1` turned out much stricter than Render's real CPU, so the local
-  emulation overestimates reply times.
-- The code-node runner needs ~47 s to start, more than n8n's default 30 s grant token:
-  `N8N_RUNNERS_GRANT_TOKEN_TTL=180` is set in `deploy/Dockerfile`.
+- Ruta del webhook con verificación de firma, en caliente, 20 solicitudes desde Colombia: mediana 0.70 s,
+  p90 0.98 s, máximo 1.28 s (unos 0.3 s corresponden a la red desde Colombia).
+- Primera solicitud después de un reinicio: unos 22 s (el runner de los nodos Code se carga en el primer uso).
+- `docker --cpus 0.1` resultó mucho más restrictivo que la CPU real de Render, por lo que la emulación
+  local sobrestima los tiempos de respuesta.
+- El runner de los nodos Code necesita ~47 s para arrancar, más que el grant token predeterminado de 30 s de n8n:
+  `N8N_RUNNERS_GRANT_TOKEN_TTL=180` se establece en `deploy/Dockerfile`.
 
-## Consequences
+## Consecuencias
 
-- Synchronous replies fit Discord's 3 s limit for now. If they stop fitting, switch to
-  Discord's deferred responses (acknowledge at once, edit the message later). The e2e
-  suite enforces a 2.5 s reply budget so regressions are detected before users see them.
-- A restart or deploy makes the bot unavailable for about two minutes.
-- The keep-alive ping relies on Render tolerating it; if not, the bot answers late after
-  15 minutes without traffic.
-- Production n8n state lives in Supabase (schema `n8n`), so the Render instance is
-  disposable: redeploying it loses nothing.
+- Por ahora, las respuestas síncronas caben en el límite de 3 s de Discord. Si dejan de caber, se cambiará a las
+  respuestas diferidas de Discord (confirmar de inmediato, editar el mensaje después). La suite e2e
+  impone un presupuesto de respuesta de 2.5 s para detectar regresiones antes de que los usuarios las vean.
+- Un reinicio o despliegue deja el bot no disponible durante unos dos minutos.
+- El ping de keep-alive depende de que Render lo tolere; si no lo tolera, el bot responde con retraso después de
+  15 minutos sin tráfico.
+- El estado de n8n en producción reside en Supabase (esquema `n8n`), por lo que la instancia de Render es
+  desechable: volver a desplegarla no pierde nada.

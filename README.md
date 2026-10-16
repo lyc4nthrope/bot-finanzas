@@ -1,27 +1,27 @@
 # bot-finanzas
 
-Personal finance bot: record income and expenses and ask for balances from Discord.
+Bot de finanzas personales: registra ingresos y gastos, y consulta saldos desde Discord.
 
 ## Stack
 
-| Piece | Tool |
+| Componente | Herramienta |
 |---|---|
-| Chat channel | Discord slash commands |
-| Automation | n8n (Docker; local first, then Hugging Face Space) |
-| Database | PostgreSQL (local container, then Supabase) |
-| Optional AI | OpenRouter free models |
+| Canal de chat | Slash commands de Discord |
+| Automatización | n8n (Docker; primero local, luego Render) |
+| Base de datos | PostgreSQL (contenedor local, luego Supabase) |
+| IA opcional | Modelos gratuitos de OpenRouter |
 
-## Setup
+## Configuración
 
-1. Copy the environment template and restrict its permissions:
+1. Copia la plantilla de entorno y restringe sus permisos:
 
    ```bash
    cp .env.example .env && chmod 600 .env
    ```
 
-2. Fill in `.env`. Values marked `[SECRET]` stay out of chats and commits.
+2. Completa `.env`. Los valores marcados con `[SECRET]` no deben aparecer en chats ni en commits.
 
-3. Start the local stack (Postgres, n8n and a temporary public tunnel) and apply migrations:
+3. Inicia el stack local (Postgres, n8n y un túnel público temporal) y aplica las migraciones:
 
    ```bash
    docker compose --profile tunnel up -d
@@ -31,79 +31,84 @@ Personal finance bot: record income and expenses and ask for balances from Disco
    docker compose logs tunnel | grep -o 'https://.*trycloudflare.com'   # public URL
    ```
 
-4. In n8n (http://localhost:5678) create the owner account and a Postgres credential named
-   `Postgres local` (host `postgres`, database and user `finanzas`, password from `.env`).
+4. Activa los usuarios de mínimo privilegio y, en n8n (http://localhost:5678), crea la cuenta de
+   propietario y una credencial de Postgres llamada `Postgres local` (host `postgres`, base de datos
+   `finanzas`, usuario `bot_app`, contraseña `DB_BOT_PASSWORD` de `.env`):
 
-5. Deploy the workflow and register the slash commands:
+   ```bash
+   scripts/setup-database.sh local
+   ```
+
+5. Despliega el workflow y registra los slash commands:
 
    ```bash
    scripts/deploy-workflow.sh workflows/discord-interactions.json discord-interactions
    scripts/register-commands.sh
    ```
 
-6. In the Discord Developer Portal set **Interactions Endpoint URL** to
+6. En el Discord Developer Portal, configura **Interactions Endpoint URL** como
    `<tunnel URL>/webhook/discord-interactions`.
 
-## Production
+## Producción
 
 ```
 Discord ──► Render (n8n, deploy/Dockerfile) ──► Supabase (PostgreSQL)
                  ▲
-     cron-job.org pings /healthz every 10 minutes so the free instance never sleeps
+     cron-job.org hace ping a /healthz cada 10 minutos para que la instancia gratuita no se suspenda
 ```
 
-| Piece | Where | Notes |
+| Componente | Ubicación | Notas |
 |---|---|---|
-| n8n | Render free web service, Virginia | Built from `deploy/Dockerfile`; pushes do not auto-deploy |
-| n8n state | Supabase, schema `n8n` | Role `n8n_app`; the Render instance is disposable |
-| Money data | Supabase, schema `finance` | Role `bot_app`: no UPDATE, no DDL |
-| TLS to Supabase | `deploy/supabase-ca.crt` | Certificates verified; never disable verification |
+| n8n | Servicio web gratuito de Render, Virginia | Se construye desde `deploy/Dockerfile`; los push no despliegan automáticamente |
+| Estado de n8n | Supabase, esquema `n8n` | Rol `n8n_app`; la instancia de Render es desechable |
+| Datos de dinero | Supabase, esquema `finance` | Rol `bot_app`: sin UPDATE, sin DDL |
+| TLS hacia Supabase | `deploy/supabase-ca.crt` | Certificados verificados; nunca se desactiva la verificación |
 
-Set up from scratch:
+Configuración desde cero:
 
-1. `scripts/setup-database.sh supabase --migrate` applies migrations and enables the roles.
-2. `scripts/cloud-n8n.sh up`, then open http://localhost:5679 to create the owner account
-   and a Postgres credential (`bot_app.<project-ref>`, SSL require) **before** the cloud
-   instance exists, so its setup page is never publicly claimable.
-3. `scripts/cloud-n8n.sh deploy workflows/discord-interactions.json <credential id> "<credential name>"`,
-   then `scripts/cloud-n8n.sh down`.
-4. Create the Render service (Docker, `deploy/Dockerfile`, health check `/healthz`) with the
-   variables listed in ADR 0002, and point Discord's Interactions Endpoint URL to
+1. `scripts/setup-database.sh supabase --migrate` aplica las migraciones y habilita los roles.
+2. `scripts/cloud-n8n.sh up`; luego abre http://localhost:5679 para crear la cuenta de propietario
+   y una credencial de Postgres (`bot_app.<project-ref>`, SSL require) **antes** de que exista la
+   instancia en la nube, para que su página de configuración nunca pueda ser reclamada públicamente.
+3. `scripts/cloud-n8n.sh deploy workflows/discord-interactions.json <credential id> "<credential name>"`;
+   luego `scripts/cloud-n8n.sh down`.
+4. Crea el servicio en Render (Docker, `deploy/Dockerfile`, health check `/healthz`) con las
+   variables indicadas en el ADR 0002, y apunta la Interactions Endpoint URL de Discord a
    `<render URL>/webhook/discord-interactions`.
 
-Decisions and measurements: `docs/adr/0002-render-instead-of-hugging-face.md`.
+Decisiones y mediciones: `docs/adr/0002-render-instead-of-hugging-face.md`.
 
-## Tests
+## Pruebas
 
-All tests run against the real local Postgres and n8n; nothing is mocked.
+Todas las pruebas se ejecutan contra el Postgres y el n8n locales reales; no se simula nada.
 
-| Script | What it proves |
+| Script | Qué demuestra |
 |---|---|
-| `scripts/test-schema.sh` | Table constraints reject invalid money data |
-| `scripts/test-functions.sh` | Balances, periods (Bogota calendar), idempotency, undo |
-| `scripts/test-roles.sh` | Least privilege: what `bot_app` and `n8n_app` can and cannot do |
-| `scripts/test-bot.sh` | The workflow end to end: signatures, replies, database writes |
+| `scripts/test-schema.sh` | Las restricciones de las tablas rechazan datos de dinero inválidos |
+| `scripts/test-functions.sh` | Saldos, periodos (calendario de Bogotá), idempotencia, deshacer |
+| `scripts/test-roles.sh` | Mínimo privilegio: qué pueden y qué no pueden hacer `bot_app` y `n8n_app` |
+| `scripts/test-bot.sh` | El workflow de extremo a extremo: firmas, respuestas, escrituras en la base de datos |
 
-## Documentation
+## Documentación
 
-- `docs/contract.md`: what each command accepts and answers.
-- `docs/workflow.md`: the n8n workflow node by node, with screenshots.
-- `docs/adr/`: architecture decisions and their reasons.
-- `docs/bot-finanzas.pdf`: all of the above in one PDF.
+- `docs/contract.md`: qué acepta y qué responde cada comando.
+- `docs/workflow.md`: el workflow de n8n nodo por nodo, con capturas de pantalla.
+- `docs/adr/`: decisiones de arquitectura y sus razones.
+- `docs/bot-finanzas.pdf`: todo lo anterior en un solo PDF.
 
-The Markdown files are the source of truth. After changing them or the workflow:
+Los archivos Markdown son la fuente de verdad. Después de modificarlos o de modificar el workflow:
 
 ```bash
 scripts/docs-screenshots.sh   # regenerates docs/images/ from a throwaway n8n
 scripts/build-docs-pdf.sh     # regenerates docs/bot-finanzas.pdf
 ```
 
-## Layout
+## Estructura
 
 ```
-discord/    slash command definitions
-docs/       contract and architecture decision records (ADR)
-sql/        database migrations
-workflows/  exported n8n workflows (JSON, no secrets)
-scripts/    test and utility scripts
+discord/    definiciones de los slash commands
+docs/       contrato y registros de decisiones de arquitectura (ADR)
+sql/        migraciones de la base de datos
+workflows/  workflows de n8n exportados (JSON, sin secretos)
+scripts/    scripts de pruebas y utilidades
 ```
