@@ -84,6 +84,20 @@ All tests run against the real local Postgres and n8n; nothing is mocked.
 | `scripts/test-roles.sh` | Least privilege: what `bot_app` and `n8n_app` can and cannot do |
 | `scripts/test-bot.sh` | The workflow end to end: signatures, replies, database writes |
 
+## Documentation
+
+- `docs/contract.md`: what each command accepts and answers.
+- `docs/workflow.md`: the n8n workflow node by node, with screenshots.
+- `docs/adr/`: architecture decisions and their reasons.
+- `docs/bot-finanzas.pdf`: all of the above in one PDF.
+
+The Markdown files are the source of truth. After changing them or the workflow:
+
+```bash
+scripts/docs-screenshots.sh   # regenerates docs/images/ from a throwaway n8n
+scripts/build-docs-pdf.sh     # regenerates docs/bot-finanzas.pdf
+```
+
 ## Layout
 
 ```
