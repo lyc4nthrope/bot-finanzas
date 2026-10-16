@@ -30,11 +30,21 @@ free instance does not sleep.
 - Startup: about 110 s until `/healthz` answers.
 - Reply time: 2.0 to 4.9 s, half above Discord's 3 s limit.
 
+## Measurements on the real Render service (2026-10-16)
+
+- Webhook path with signature check, warm, 20 requests from Colombia: median 0.70 s,
+  p90 0.98 s, max 1.28 s (about 0.3 s of that is network from Colombia).
+- First request after a restart: about 22 s (the code-node runner loads on first use).
+- `docker --cpus 0.1` turned out much stricter than Render's real CPU, so the local
+  emulation overestimates reply times.
+- The code-node runner needs ~47 s to start, more than n8n's default 30 s grant token:
+  `N8N_RUNNERS_GRANT_TOKEN_TTL=180` is set in `deploy/Dockerfile`.
+
 ## Consequences
 
-- If the real service is as slow as the emulation, replies must switch to Discord's
-  deferred responses (acknowledge at once, edit the message later). The e2e suite enforces
-  a 2.5 s reply budget so this is detected before users see failures.
+- Synchronous replies fit Discord's 3 s limit for now. If they stop fitting, switch to
+  Discord's deferred responses (acknowledge at once, edit the message later). The e2e
+  suite enforces a 2.5 s reply budget so regressions are detected before users see them.
 - A restart or deploy makes the bot unavailable for about two minutes.
 - The keep-alive ping relies on Render tolerating it; if not, the bot answers late after
   15 minutes without traffic.
