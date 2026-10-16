@@ -32,12 +32,22 @@ services:
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
-      WEBHOOK_URL: ${WEBHOOK_URL}
+      N8N_WEBHOOK_URL: ${WEBHOOK_URL}
       NODE_FUNCTION_ALLOW_BUILTIN: ${NODE_FUNCTION_ALLOW_BUILTIN}
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
       TZ: ${TZ}
     volumes:
       - n8n_data:/home/node/.n8n
+
+  # Temporary public HTTPS URL for local testing (no Cloudflare account needed).
+  # The URL changes on every start; read it with: docker compose logs tunnel
+  tunnel:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on:
+      - n8n
+    command: tunnel --no-autoupdate --url http://n8n:5678
 
 volumes:
   postgres_data:
