@@ -1,0 +1,59 @@
+[
+  {
+    "name": "gasto",
+    "type": 1,
+    "description": "Registrar un gasto",
+    "options": [
+      { "name": "monto", "description": "Valor en pesos, sin puntos (ej: 20000)", "type": 4, "required": true, "min_value": 1, "max_value": 1000000000 },
+      { "name": "categoria", "description": "En qué se gastó", "type": 3, "required": true, "choices": [
+        { "name": "mercado", "value": "mercado" },
+        { "name": "comida", "value": "comida" },
+        { "name": "transporte", "value": "transporte" },
+        { "name": "servicios", "value": "servicios" },
+        { "name": "hogar", "value": "hogar" },
+        { "name": "salud", "value": "salud" },
+        { "name": "deudas", "value": "deudas" },
+        { "name": "otro", "value": "otro" }
+      ] },
+      { "name": "nota", "description": "Detalle opcional", "type": 3, "required": false, "max_length": 200 }
+    ]
+  },
+  {
+    "name": "ingreso",
+    "type": 1,
+    "description": "Registrar un ingreso",
+    "options": [
+      { "name": "monto", "description": "Valor en pesos, sin puntos (ej: 1500000)", "type": 4, "required": true, "min_value": 1, "max_value": 1000000000 },
+      { "name": "categoria", "description": "De dónde vino", "type": 3, "required": true, "choices": [
+        { "name": "sueldo", "value": "sueldo" },
+        { "name": "ventas", "value": "ventas" },
+        { "name": "regalo", "value": "regalo" },
+        { "name": "otro", "value": "otro" }
+      ] },
+      { "name": "nota", "description": "Detalle opcional", "type": 3, "required": false, "max_length": 200 }
+    ]
+  },
+  {
+    "name": "saldo",
+    "type": 1,
+    "description": "Ver cuánta plata hay y cuánto se ha gastado este mes"
+  },
+  {
+    "name": "resumen",
+    "type": 1,
+    "description": "Ver ingresos y gastos por categoría",
+    "options": [
+      { "name": "periodo", "description": "Periodo a revisar (por defecto: mes)", "type": 3, "required": false, "choices": [
+        { "name": "hoy", "value": "hoy" },
+        { "name": "semana", "value": "semana" },
+        { "name": "mes", "value": "mes" },
+        { "name": "año", "value": "año" }
+      ] }
+    ]
+  },
+  {
+    "name": "deshacer",
+    "type": 1,
+    "description": "Borrar el último movimiento registrado"
+  }
+]

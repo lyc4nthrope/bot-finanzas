@@ -1,0 +1,530 @@
+{
+  "id": "discordFinanzas1",
+  "name": "Discord interactions",
+  "nodes": [
+    {
+      "id": "n01",
+      "name": "Discord webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "7b1f2a4e-3c5d-4e6f-8a9b-0c1d2e3f4a5b",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-interactions",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      }
+    },
+    {
+      "id": "n02",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// Public by design: Discord publishes this key so anyone can check its signatures.\nconst DISCORD_PUBLIC_KEY = '4365a7d1e5e2c8e4bcec473281cfa6a9f434cd60984589bdbaa5ac1f57b85c83';\nconst ED25519_SPKI_PREFIX = '302a300506032b6570032100';\n// Rejects replayed requests captured earlier.\nconst MAX_CLOCK_SKEW_SECONDS = 300;\nconst TRANSACTION_TYPES = { gasto: 'expense', ingreso: 'income' };\n\nconst item = $input.first();\nconst signature = String(item.json.headers['x-signature-ed25519'] || '');\nconst timestamp = String(item.json.headers['x-signature-timestamp'] || '');\n// The signature covers the exact bytes Discord sent, never the re-parsed JSON.\nconst rawBody = item.binary?.data\n  ? await this.helpers.getBinaryDataBuffer(0, 'data')\n  : Buffer.alloc(0);\n\nfunction isAuthentic() {\n  if (!/^[0-9a-f]{128}$/i.test(signature)) return false;\n  if (!/^\\d{1,12}$/.test(timestamp) || rawBody.length === 0) return false;\n  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > MAX_CLOCK_SKEW_SECONDS) return false;\n  const publicKey = crypto.createPublicKey({\n    key: Buffer.from(ED25519_SPKI_PREFIX + DISCORD_PUBLIC_KEY, 'hex'),\n    format: 'der',\n    type: 'spki',\n  });\n  const signedPayload = Buffer.concat([Buffer.from(timestamp, 'utf8'), rawBody]);\n  return crypto.verify(null, signedPayload, publicKey, Buffer.from(signature, 'hex'));\n}\n\nif (!isAuthentic()) {\n  return [{ json: { authentic: false } }];\n}\n\nconst interaction = JSON.parse(rawBody.toString('utf8'));\nconst command = interaction.data?.name ?? null;\nconst options = Object.fromEntries(\n  (interaction.data?.options ?? []).map((option) => [option.name, option.value]),\n);\n\nreturn [{\n  json: {\n    authentic: true,\n    interactionType: interaction.type,\n    interactionId: interaction.id,\n    userId: interaction.member?.user?.id ?? interaction.user?.id,\n    command,\n    transactionType: TRANSACTION_TYPES[command] ?? null,\n    amount: options.monto ?? null,\n    category: options.categoria ?? null,\n    note: options.nota ?? '',\n    period: command === 'resumen' ? (options.periodo ?? 'mes') : 'mes',\n  },\n}];"
+      }
+    },
+    {
+      "id": "n03",
+      "name": "Is authentic?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "authentic",
+              "leftValue": "={{ $json.authentic }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n04",
+      "name": "Reject 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        520
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "invalid request signature",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "n05",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        280
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "renameOutput": true,
+              "outputKey": "ping",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-ping",
+                    "leftValue": "={{ $json.interactionType === 1 }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "record",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-record",
+                    "leftValue": "={{ ['gasto', 'ingreso'].includes($json.command) }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "summary",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-summary",
+                    "leftValue": "={{ ['saldo', 'resumen'].includes($json.command) }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "undo",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-undo",
+                    "leftValue": "={{ $json.command === 'deshacer' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unknown"
+        }
+      }
+    },
+    {
+      "id": "n06",
+      "name": "Build PONG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        40
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { type: 1 } }];"
+      }
+    },
+    {
+      "id": "n07",
+      "name": "Record transaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        900,
+        200
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "postgres": {
+          "id": "xzdX1vX5x8zeXdNK",
+          "name": "Postgres local"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT finance.record_transaction($1, $2, $3, $4, $5, $6) AS result;",
+        "options": {
+          "queryReplacement": "={{ [$json.interactionId, $json.userId, $json.transactionType, $json.amount, $json.category, $json.note] }}"
+        }
+      }
+    },
+    {
+      "id": "n08",
+      "name": "Get summary",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        900,
+        360
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "postgres": {
+          "id": "xzdX1vX5x8zeXdNK",
+          "name": "Postgres local"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT finance.summary($1, $2) AS result;",
+        "options": {
+          "queryReplacement": "={{ [$json.userId, $json.period] }}"
+        }
+      }
+    },
+    {
+      "id": "n09",
+      "name": "Undo last",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        900,
+        520
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "postgres": {
+          "id": "xzdX1vX5x8zeXdNK",
+          "name": "Postgres local"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT finance.undo_last($1) AS result;",
+        "options": {
+          "queryReplacement": "={{ [$json.userId] }}"
+        }
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Build unknown command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        680
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { type: 4, data: { content: 'No conozco ese comando.', flags: 64 } } }];"
+      }
+    },
+    {
+      "id": "n11",
+      "name": "Format reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const request = $('Verify signature').first().json;\nconst result = $input.first().json.result;\n\nconst PERIOD_LABELS = { hoy: 'hoy', semana: 'esta semana', mes: 'este mes', 'año': 'este año' };\nconst TYPE_LABELS = { expense: 'gasto', income: 'ingreso' };\n\nfunction money(value) {\n  const amount = Number(value);\n  const digits = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(Math.abs(amount));\n  return (amount < 0 ? '-$' : '$') + digits;\n}\n\nfunction describeRecord() {\n  if (!result.inserted) return 'Ese movimiento ya estaba registrado.';\n  if (result.type === 'expense') {\n    return `✅ Gasto registrado: ${money(result.amount)} en ${result.category}.\\n`\n      + `Gastado este mes: ${money(result.expense)}`;\n  }\n  return `✅ Ingreso registrado: ${money(result.amount)} (${result.category}).\\n`\n    + `Saldo total: ${money(result.balance)}`;\n}\n\nfunction describeBalance() {\n  return `💰 Saldo total: ${money(result.balance)}\\n`\n    + `Este mes: ingresos ${money(result.income)} · gastos ${money(result.expense)}`;\n}\n\nfunction describeSummary() {\n  const lines = [\n    `📊 Resumen de ${PERIOD_LABELS[result.period]}`,\n    `Ingresos: ${money(result.income)}`,\n    `Gastos: ${money(result.expense)}`,\n    '',\n  ];\n  if (result.by_category.length === 0) {\n    lines.push('Sin gastos en este periodo.');\n  } else {\n    lines.push('Gastos por categoría:');\n    for (const row of result.by_category) lines.push(`• ${row.category}: ${money(row.total)}`);\n  }\n  return lines.join('\\n');\n}\n\nfunction describeUndo() {\n  if (!result.deleted) return 'No hay movimientos para deshacer.';\n  return `↩️ Eliminado: ${TYPE_LABELS[result.type]} de ${money(result.amount)} (${result.category}).\\n`\n    + `Saldo total: ${money(result.balance)}`;\n}\n\nconst DESCRIBE = {\n  gasto: describeRecord,\n  ingreso: describeRecord,\n  saldo: describeBalance,\n  resumen: describeSummary,\n  deshacer: describeUndo,\n};\n\n// flags 64: only the sender sees the reply.\nreturn [{ json: { type: 4, data: { content: DESCRIBE[request.command](), flags: 64 } } }];"
+      }
+    },
+    {
+      "id": "n12",
+      "name": "Build database error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        520
+      ],
+      "parameters": {
+        "jsCode": "const request = $('Verify signature').first().json;\nconst isWrite = ['gasto', 'ingreso'].includes(request.command);\n// Never confirm a transaction that was not stored.\nconst content = isWrite\n  ? '⚠️ No pude guardar el movimiento. Intenta de nuevo en un momento.'\n  : '⚠️ Algo salió mal. Intenta de nuevo.';\nreturn [{ json: { type: 4, data: { content, flags: 64 } } }];"
+      }
+    },
+    {
+      "id": "n13",
+      "name": "Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1380,
+        300
+      ],
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Discord webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Is authentic?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is authentic?": {
+      "main": [
+        [
+          {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "node": "Build PONG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record transaction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Undo last",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build unknown command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record transaction": {
+      "main": [
+        [
+          {
+            "node": "Format reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build database error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get summary": {
+      "main": [
+        [
+          {
+            "node": "Format reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build database error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Undo last": {
+      "main": [
+        [
+          {
+            "node": "Format reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build database error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build PONG": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build unknown command": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format reply": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build database error": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
