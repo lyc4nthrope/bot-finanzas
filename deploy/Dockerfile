@@ -6,3 +6,7 @@ FROM n8nio/n8n:2.43.7
 # Public CA certificate (not a secret), downloaded from the Supabase dashboard.
 COPY deploy/supabase-ca.crt /etc/ssl/certs/supabase-ca.crt
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/supabase-ca.crt
+
+# On Render's free 0.1 CPU the code-node runner needs ~47 s to start, longer than the
+# default 30 s grant token: the broker then rejects it (403) and every Code node fails.
+ENV N8N_RUNNERS_GRANT_TOKEN_TTL=180
