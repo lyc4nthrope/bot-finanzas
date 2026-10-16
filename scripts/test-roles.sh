@@ -44,6 +44,10 @@ denied  "bot_app cannot create tables"         bot_app "CREATE TABLE finance.x (
 denied  "bot_app cannot read n8n state"        bot_app "SELECT * FROM n8n.workflow_entity;"                     "permission denied for schema n8n"
 
 allowed "n8n_app manages its own schema"       n8n_app "CREATE TABLE n8n.probe (id int); DROP TABLE n8n.probe;"
+# n8n runs this on every start; PostgreSQL checks CREATE on the database even when
+# the schema already exists (without it n8n hangs silently at startup).
+allowed "n8n_app passes n8n's startup check"   n8n_app 'CREATE SCHEMA IF NOT EXISTS "n8n";'
+denied  "n8n_app cannot alter finance schema"  n8n_app "CREATE TABLE finance.x (id int);"                       "permission denied for schema finance"
 denied  "n8n_app cannot read money data"       n8n_app "SELECT * FROM finance.transactions;"                    "permission denied for schema finance"
 denied  "n8n_app cannot call money functions"  n8n_app "SELECT finance.summary($U, 'mes');"                     "permission denied for"
 
