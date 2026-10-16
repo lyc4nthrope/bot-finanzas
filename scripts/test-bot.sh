@@ -41,29 +41,49 @@ jq --arg id "$TEST_WORKFLOW_ID" --arg path "$TEST_PATH" --arg real "$real_key" -
   | .name = "TEST " + .name
   | (.nodes[] | select(.type == "n8n-nodes-base.webhook")) |= (.parameters.path = $path | .webhookId = "00000000-0000-4000-8000-000000000e2e")
   | (.nodes[] | select(.name == "Verify signature") | .parameters.jsCode) |= sub($real; $test)
-' "$workflow_file" > "$test_file"
+  | (.nodes[] | select(.type == "n8n-nodes-base.httpRequest") | .parameters.url) |=
+      (sub("https://openrouter.ai"; $stub) | sub("https://discord.com"; $stub))
+' --arg stub "http://localhost:8787" "$workflow_file" > "$test_file"
 grep -q "$public_hex" "$test_file" || { echo "test key was not injected" >&2; exit 1; }
 
 echo "DELETE FROM finance.transactions WHERE user_id = '$TEST_USER_ID';" | sql
 scripts/deploy-workflow.sh "$test_file" "$TEST_PATH"
 
-# 3. Run the cases inside the n8n container (it has Node and reaches n8n on localhost).
+# The /ayuda text must match docs/contract.md exactly: the contract is the source of truth.
+help_text=$(awk '/^### `\/ayuda`/{section=1} section && /^```$/{if (inside) exit; inside=1; next} inside' docs/contract.md)
+[[ -n $help_text ]] || { echo "could not read the /ayuda text from docs/contract.md" >&2; exit 1; }
+
+# 3. Run the cases inside the n8n container (it has Node and reaches n8n on localhost),
+#    with a stub playing OpenRouter and Discord for the AI command.
 docker compose cp scripts/e2e.mjs n8n:/tmp/e2e.mjs >/dev/null 2>&1
+docker compose cp scripts/stub-server.mjs n8n:/tmp/stub-server.mjs >/dev/null 2>&1
+docker compose exec -d n8n node /tmp/stub-server.mjs
+for _ in $(seq 1 20); do
+  docker compose exec -T n8n wget -q -O /dev/null http://localhost:8787/calls/ping 2>/dev/null && break
+  sleep 0.5
+done
 set +e
 docker compose exec -T \
   -e BASE_URL="http://localhost:5678/webhook/$TEST_PATH" \
   -e PRIVATE_KEY_PEM="$private_pem" \
   -e TEST_USER_ID="$TEST_USER_ID" \
+  -e STUB_URL="http://localhost:8787" \
+  -e HELP_TEXT="$help_text" \
   n8n node /tmp/e2e.mjs
 e2e_status=$?
 set -e
 
-# 4. What actually reached the database: one expense, note with its comma intact.
-stored=$(echo "SELECT count(*) || '|' || coalesce(string_agg(note, ','), '') FROM finance.transactions WHERE user_id = '$TEST_USER_ID';" | sql)
-if [[ $stored == "1|arepa, tinto" ]]; then
-  echo "PASS  database holds exactly the confirmed expense, note intact"
+# 4. What actually reached the database: the /gasto expense (note with its comma intact)
+#    plus the five AI registrations that passed validation (one replay stored once), the long
+#    note trimmed to 200 and the NUL byte removed.
+#    Nothing from the rejected or failed AI calls.
+# Exact notes, sorted: a count alone can pass when one extra row hides one missing row.
+stored=$(echo "SELECT string_agg(CASE WHEN note = repeat('x', 200) THEN 'x*200' ELSE note END, ';' ORDER BY note COLLATE \"C\")
+               FROM finance.transactions WHERE user_id = '$TEST_USER_ID';" | sql)
+if [[ $stored == "@everyone hola;arepa, tinto;leche;leche;sueldo;x*200" ]]; then
+  echo "PASS  database holds exactly the confirmed transactions, notes intact"
 else
-  echo "FAIL  database holds exactly the confirmed expense, note intact (got: $stored)"
+  echo "FAIL  database holds exactly the confirmed transactions, notes intact (got: $stored)"
   e2e_status=1
 fi
 
