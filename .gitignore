@@ -1,0 +1,13 @@
+# Secrets: never commit real values. Only .env.example is versioned.
+.env
+.env.*
+!.env.example
+
+# Local runtime data (n8n state, database volumes)
+.n8n/
+data/
+
+# Tooling
+node_modules/
+*.log
+.DS_Store
