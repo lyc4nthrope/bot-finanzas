@@ -2,6 +2,15 @@
 
 Bot de finanzas personales: registra ingresos y gastos, y consulta saldos desde Discord.
 
+## Pruébalo
+
+Únete al servidor de prueba y escribe `/ayuda` en cualquier canal:
+[https://discord.gg/KbRFKQFqf](https://discord.gg/KbRFKQFqf)
+
+<img src="docs/images/discord-invite-qr.png" alt="Código QR con el enlace de invitación al servidor de Discord" width="200">
+
+> La invitación vence el 15 de noviembre de 2026.
+
 ## El bot en acción
 
 Comandos: `/gasto`, `/ingreso`, `/saldo`, `/resumen`, `/deshacer`, `/registrar` (con IA) y `/ayuda`
